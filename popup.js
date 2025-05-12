@@ -9,20 +9,26 @@ document.getElementById('scrapeButton').addEventListener('click', async () => {
     });
 
     const scrapedData = result[0].result;
+
     if (scrapedData && scrapedData.posts.length > 0) {
       const formattedPosts = scrapedData.posts
         .map(
           (post, index) =>
-            `Post ${index + 1}:\nContent: ${post.content}\nLink: ${
-              post.link
-            }\n\n`
+            `<strong>Post ${index + 1}:</strong>\n<strong>Author:</strong> ${
+              post.author
+            }\n<strong>Author Link:</strong> ${
+              post.authorLink
+            }\n<strong>Content:</strong> ${
+              post.content
+            }\n<strong>Link:</strong> ${post.link}\n\n`
         )
         .join('-------------------\n');
-      document.getElementById('result').textContent = formattedPosts;
+      document.getElementById('result').innerHTML = formattedPosts;
     } else {
       document.getElementById('result').textContent =
         'No posts found on this page.';
     }
+    // document.getElementById('result').textContent = scrapedData.html;
   } catch (error) {
     document.getElementById('result').textContent = 'Error: ' + error.message;
   }
@@ -50,50 +56,61 @@ async function scrapePost() {
 
   // Function to process posts
   function processPosts() {
-    const postContainers = document.querySelectorAll(
-      '[data-ad-rendering-role="story_message"]'
-    );
+    // First find the feed container
+    const feedContainers = document.querySelector('div[role="feed"]');
+    if (!feedContainers) return;
+    // get all direct child divs of feedContainers
+    const directChildDivs = feedContainers.querySelectorAll(':scope > div');
 
-    postContainers.forEach((postContainer) => {
+    directChildDivs.forEach((feedContainer) => {
       let postText = '';
       let postLink = '';
+      let author = '';
+      let authorLink = '';
 
-      if (postContainer) {
-        postText = postContainer.innerText.trim();
+      // Find the story message within this specific post
+      const storyMessage = feedContainer.querySelector(
+        '[data-ad-rendering-role="story_message"]'
+      );
+
+      const authorContainer = feedContainer.querySelector(
+        '[data-ad-rendering-role="profile_name"]'
+      );
+
+      if (authorContainer) {
+        author = authorContainer.querySelector('strong').innerText.trim();
+        const authorurl = authorContainer
+          .querySelector('a')
+          .getAttribute('href');
+
+        const authorLinkMatch = authorurl.match(/\/groups\/(\d+)\/user\/(\d+)/);
+        if (authorLinkMatch) {
+          const groupId = authorLinkMatch[1];
+          const userId = authorLinkMatch[2];
+          authorLink = `https://www.facebook.com/groups/${groupId}/user/${userId}`;
+        }
+      }
+
+      if (storyMessage) {
+        postText = storyMessage.innerText.trim();
 
         // Try to find the permalink inside the article
-        const article = postContainer.closest('[role="article"]');
-        let foundLink = false;
-        if (article) {
-          const anchors = article.querySelectorAll('a[href]');
-          for (const a of anchors) {
-            const href = a.getAttribute('href');
-            if (
-              (href.includes('/posts/') || href.includes('/permalink/')) &&
-              !href.includes('/comment_id=') &&
-              !href.includes('/user/')
-            ) {
-              postLink = a.href.startsWith('http')
-                ? a.href
-                : 'https://www.facebook.com' + a.getAttribute('href');
-              foundLink = true;
-              break;
-            }
-          }
-        }
-        // Fallback: search the whole document if not found in article
-        if (!foundLink) {
-          const anchors = document.querySelectorAll('a[href]');
-          for (const a of anchors) {
-            const href = a.getAttribute('href');
-            if (
-              (href.includes('/posts/') || href.includes('/permalink/')) &&
-              !href.includes('/comment_id=') &&
-              !href.includes('/user/')
-            ) {
-              postLink = a.href.startsWith('http')
-                ? a.href
-                : 'https://www.facebook.com' + a.getAttribute('href');
+
+        const anchors = feedContainer.querySelectorAll('a[href]');
+        for (const a of anchors) {
+          const href = a.getAttribute('href');
+          // Check if it's a post link with the specific structure
+
+          if (
+            href.startsWith('https://www.facebook.com/groups/') &&
+            !href.includes('comment_id') &&
+            href.includes('/posts/')
+          ) {
+            const postIdMatch = href.match(/\/groups\/(\d+)\/posts\/(\d+)/);
+            if (postIdMatch) {
+              const groupId = postIdMatch[1];
+              const postId = postIdMatch[2];
+              postLink = `https://www.facebook.com/groups/${groupId}/posts/${postId}`;
               break;
             }
           }
@@ -106,7 +123,9 @@ async function scrapePost() {
           processedPosts.add(postId);
           posts.push({
             content: postText,
-            link: postLink
+            link: postLink,
+            author: author,
+            authorLink: authorLink
           });
         }
       }
@@ -123,7 +142,7 @@ async function scrapePost() {
     // Now start scrolling
     let lastHeight = document.body.scrollHeight;
     let scrollCount = 0;
-    const maxScrolls = 20;
+    const maxScrolls = 0;
     let patience = 0;
     const maxPatience = 3;
 
