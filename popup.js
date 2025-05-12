@@ -4,6 +4,28 @@ document.getElementById('scrapeButton').addEventListener('click', async () => {
   console.log('tab', tab);
 
   try {
+    // First execute script to expand "See More" buttons
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      function: () => {
+        const seeMoreButtons = document.querySelectorAll(
+          'div[role="button"]:not([aria-expanded="true"])'
+        );
+        seeMoreButtons.forEach((button) => {
+          if (
+            button.textContent.includes('See More') ||
+            button.textContent.includes('See more')
+          ) {
+            button.click();
+          }
+        });
+      }
+    });
+
+    // Wait for content to expand
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Then scrape the content
     const result = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       function: scrapePost
@@ -33,15 +55,37 @@ document.getElementById('scrapeButton').addEventListener('click', async () => {
   }
 });
 
-function scrapePost() {
+async function scrapePost() {
   const wholePage = document.documentElement.outerHTML;
   const posts = [];
 
-  // Find all post containers using the original working selector
+  // Find all post containers
   const postContainers = document.querySelectorAll(
     '[data-ad-rendering-role="story_message"]'
   );
 
+  // Function to expand "See More" buttons
+  function expandSeeMore() {
+    const seeMoreButtons = document.querySelectorAll(
+      'div[role="button"]:not([aria-expanded="true"])'
+    );
+    seeMoreButtons.forEach((button) => {
+      if (
+        button.textContent.includes('See More') ||
+        button.textContent.includes('See more')
+      ) {
+        button.click();
+      }
+    });
+  }
+
+  // Click all "See More" buttons first
+  expandSeeMore();
+
+  // Wait for content to expand
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  // Now process the posts after the timeout
   postContainers.forEach((postContainer) => {
     let postText = '';
     let postLink = '';
@@ -53,13 +97,11 @@ function scrapePost() {
       const anchors = document.documentElement.querySelectorAll('a[href]');
       for (const a of anchors) {
         const href = a.getAttribute('href');
-        // Heuristics: must contain /posts/ or /permalink/ and not be a comment or user link
         if (
           (href.includes('/posts/') || href.includes('/permalink/')) &&
           !href.includes('/comment_id=') &&
           !href.includes('/user/')
         ) {
-          // If the link is relative, make it absolute
           postLink = a.href.startsWith('http')
             ? a.href
             : 'https://www.facebook.com' + a.getAttribute('href');
