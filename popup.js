@@ -78,16 +78,27 @@ async function scrapePost() {
       );
 
       if (authorContainer) {
-        author = authorContainer.querySelector('strong').innerText.trim();
-        const authorurl = authorContainer
-          .querySelector('a')
-          .getAttribute('href');
-
-        const authorLinkMatch = authorurl.match(/\/groups\/(\d+)\/user\/(\d+)/);
-        if (authorLinkMatch) {
-          const groupId = authorLinkMatch[1];
-          const userId = authorLinkMatch[2];
-          authorLink = `https://www.facebook.com/groups/${groupId}/user/${userId}`;
+        // Check if author is anonymous
+        const authorElement = authorContainer.querySelector('strong');
+        if (authorElement) {
+          author = authorElement.innerText.trim();
+          // If author is anonymous, set both author and authorLink to "Anonymous"
+          if (author.toLowerCase().includes('anonymous')) {
+            author = 'Anonymous';
+            authorLink = 'Anonymous';
+          } else {
+            const authorurl = authorContainer
+              .querySelector('a')
+              .getAttribute('href');
+            const authorLinkMatch = authorurl.match(
+              /\/groups\/(\d+)\/user\/(\d+)/
+            );
+            if (authorLinkMatch) {
+              const groupId = authorLinkMatch[1];
+              const userId = authorLinkMatch[2];
+              authorLink = `https://www.facebook.com/groups/${groupId}/user/${userId}`;
+            }
+          }
         }
       }
 
@@ -103,7 +114,8 @@ async function scrapePost() {
 
           if (
             href.startsWith('https://www.facebook.com/groups/') &&
-            !href.includes('comment_id') &&
+            // temporay fix because cann't get post link without hover on timestamp of the post, we are getting post link from comment
+            // !href.includes('comment_id') &&
             href.includes('/posts/')
           ) {
             const postIdMatch = href.match(/\/groups\/(\d+)\/posts\/(\d+)/);
@@ -142,7 +154,7 @@ async function scrapePost() {
     // Now start scrolling
     let lastHeight = document.body.scrollHeight;
     let scrollCount = 0;
-    const maxScrolls = 0;
+    const maxScrolls = 5;
     let patience = 0;
     const maxPatience = 3;
 
